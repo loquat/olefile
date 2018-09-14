@@ -23,15 +23,6 @@ Python applications with this statement:
 
     import olefile
 
-Before v0.40, olefile was named ``OleFileIO_PL``. To maintain backward
-compatibility with older applications and samples, a simple script is
-also installed so that the following statement imports olefile as
-OleFileIO\_PL:
-
-::
-
-    import OleFileIO_PL
-
 As of version 0.30, the code has been changed to be compatible with
 Python 3.x. As a consequence, compatibility with Python 2.5 or older is
 not provided anymore.
@@ -64,6 +55,21 @@ Create an :py:class:`olefile.OleFileIO` object with the file path as parameter:
 
     ole = olefile.OleFileIO('myfile.doc')
 
+Since olefile v0.46, the recommended way to open an OLE file is to use
+OleFileIO as a context manager, using the "with" clause:
+
+::
+
+    with olefile.OleFileIO('myfile.doc') as ole
+        # perform all operations on the ole object
+
+This guarantees that the OleFileIO object is closed when exiting
+the with block, even if an exception is triggered.
+It will call :py:meth:`olefile.OleFileIO.close` automatically.
+
+(new in v0.46)
+
+
 Open an OLE file from a bytes string
 ------------------------------------
 
@@ -73,7 +79,7 @@ string.
 ::
 
     ole = olefile.OleFileIO(s)
-        
+
 
 Note: olefile checks the size of the string provided as argument to
 determine if it is a file path or the content of an OLE file. An OLE
@@ -310,9 +316,8 @@ Overwriting a stream
 --------------------
 
 The :py:meth:`olefile.OleFileIO.write_stream` method can overwrite an existing stream in the file.
-The new stream data must be the exact same size as the existing one. For
-now, write\_stream can only write streams of 4KB or larger (stored in
-the main FAT).
+The new stream data must be the exact same size as the existing one. Since v0.45,
+this method can write streams of any size (stored in the main FAT or the MiniFAT).
 
 For example, you may change text in a MS Word document:
 
@@ -392,7 +397,7 @@ after parsing to close the file on disk. (new in v0.22)
 ::
 
     ole.close()
-        
+
 
 Enable logging
 --------------

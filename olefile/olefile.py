@@ -4,11 +4,11 @@ olefile (formerly OleFileIO_PL)
 Module to read/write Microsoft OLE2 files (also called Structured Storage or
 Microsoft Compound Document File Format), such as Microsoft Office 97-2003
 documents, Image Composer and FlashPix files, Outlook messages, ...
-This version is compatible with Python 2.6+ and 3.x
+This version is compatible with Python 2.7 and 3.4+
 
 Project website: https://www.decalage.info/olefile
 
-olefile is copyright (c) 2005-2017 Philippe Lagadec
+olefile is copyright (c) 2005-2018 Philippe Lagadec
 (https://www.decalage.info)
 
 olefile is based on the OleFileIO module from the PIL library v1.1.7
@@ -22,16 +22,16 @@ Copyright (c) 1995-2009 by Fredrik Lundh
 See source code and LICENSE.txt for information on usage and redistribution.
 """
 
-# Since OleFileIO_PL v0.30, only Python 2.6+ and 3.x is supported
+# Since OleFileIO_PL v0.45, only Python 2.7 and 3.4+ are supported
 # This import enables print() as a function rather than a keyword
 # (main requirement to be compatible with Python 3.x)
 # The comment on the line below should be printed on Python 2.5 or older:
-from __future__ import print_function   # This version of olefile requires Python 2.6+ or 3.x.
+from __future__ import print_function   # This version of olefile requires Python 2.7 or 3.4+.
 
 
 #--- LICENSE ------------------------------------------------------------------
 
-# olefile (formerly OleFileIO_PL) is copyright (c) 2005-2017 Philippe Lagadec
+# olefile (formerly OleFileIO_PL) is copyright (c) 2005-2018 Philippe Lagadec
 # (https://www.decalage.info)
 #
 # All rights reserved.
@@ -86,14 +86,19 @@ from __future__ import print_function   # This version of olefile requires Pytho
 # OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-__date__    = "2017-05-31"
-__version__ = '0.45dev1'
+__date__    = "2018-09-09"
+__version__ = '0.46'
 __author__  = "Philippe Lagadec"
 
 __all__ = ['isOleFile', 'OleFileIO', 'OleMetadata', 'enable_logging',
-           'MAGIC', 'STGTY_EMPTY',
+           'MAGIC', 'STGTY_EMPTY', 'KEEP_UNICODE_NAMES',
            'STGTY_STREAM', 'STGTY_STORAGE', 'STGTY_ROOT', 'STGTY_PROPERTY',
-           'STGTY_LOCKBYTES', 'MINIMAL_OLEFILE_SIZE',]
+           'STGTY_LOCKBYTES', 'MINIMAL_OLEFILE_SIZE',
+           'DEFECT_UNSURE', 'DEFECT_POTENTIAL', 'DEFECT_INCORRECT',
+           'DEFECT_FATAL', 'DEFAULT_PATH_ENCODING',
+           'MAXREGSECT', 'DIFSECT', 'FATSECT', 'ENDOFCHAIN', 'FREESECT',
+           'MAXREGSID', 'NOSTREAM', 'UNKNOWN_SIZE', 'WORD_CLSID'
+]
 
 import io
 import sys
@@ -158,16 +163,6 @@ else:
 
 # === LOGGING =================================================================
 
-class NullHandler(logging.Handler):
-    """
-    Log Handler without output, to avoid printing messages if logging is not
-    configured by the main application.
-    Python 2.7 has logging.NullHandler, but this is necessary for 2.6:
-    see https://docs.python.org/2.6/library/logging.html#configuring-logging-for-a-library
-    """
-    def emit(self, record):
-        pass
-
 def get_logger(name, level=logging.CRITICAL+1):
     """
     Create a suitable logger object for this module.
@@ -190,7 +185,7 @@ def get_logger(name, level=logging.CRITICAL+1):
     logger = logging.getLogger(name)
     # only add a NullHandler for this logger, it is up to the application
     # to configure its own logging:
-    logger.addHandler(NullHandler())
+    logger.addHandler(logging.NullHandler())
     logger.setLevel(level)
     return logger
 
@@ -250,11 +245,10 @@ VT_STORED_OBJECT=69; VT_BLOB_OBJECT=70; VT_CF=71; VT_CLSID=72;
 VT_VECTOR=0x1000;
 
 # map property id to name (for debugging purposes)
-
-VT = {}
-for keyword, var in list(vars().items()):
-    if keyword[:3] == "VT_":
-        VT[var] = keyword
+# VT = {}
+# for keyword, var in list(vars().items()):
+#     if keyword[:3] == "VT_":
+#         VT[var] = keyword
 
 #
 # --------------------------------------------------------------------
@@ -575,6 +569,11 @@ class OleStream(io.BytesIO):
         log.debug('  sect=%d (%X), size=%d, offset=%d, sectorsize=%d, len(fat)=%d, fp=%s'
             %(sect,sect,size,offset,sectorsize,len(fat), repr(fp)))
         self.ole = olefileio
+        # this check is necessary, otherwise when attempting to open a stream
+        # from a closed OleFile, a stream of size zero is returned without
+        # raising an exception. (see issue #81)
+        if self.ole.fp.closed:
+            raise OSError('Attempting to open a stream from a closed OLE File')
         #[PL] To detect malformed documents with FAT loops, we compute the
         # expected number of sectors in the stream:
         unknown_size = False
@@ -799,16 +798,36 @@ class OleDirectoryEntry:
         if self.entry_type == STGTY_STORAGE and self.size != 0:
             olefile._raise_defect(DEFECT_POTENTIAL, 'OLE storage with size>0')
         # check if stream is not already referenced elsewhere:
+        self.is_minifat = False
         if self.entry_type in (STGTY_ROOT, STGTY_STREAM) and self.size>0:
             if self.size < olefile.minisectorcutoff \
             and self.entry_type==STGTY_STREAM: # only streams can be in MiniFAT
                 # ministream object
-                minifat = True
+                self.is_minifat = True
             else:
-                minifat = False
-            olefile._check_duplicate_stream(self.isectStart, minifat)
+                self.is_minifat = False
+            olefile._check_duplicate_stream(self.isectStart, self.is_minifat)
+        self.sect_chain = None
 
 
+    def build_sect_chain(self, olefile):
+        if self.sect_chain:
+            return
+        if self.entry_type not in (STGTY_ROOT, STGTY_STREAM) or self.size == 0:
+            return
+
+        self.sect_chain = list()
+
+        if self.is_minifat and not olefile.minifat:
+            olefile.loadminifat()
+
+        next_sect = self.isectStart
+        while next_sect != ENDOFCHAIN:
+            self.sect_chain.append(next_sect)
+            if self.is_minifat:
+                next_sect = olefile.minifat[next_sect]
+            else:
+                next_sect = olefile.fat[next_sect]
 
     def build_storage_tree(self):
         """
@@ -856,6 +875,12 @@ class OleDirectoryEntry:
             child = self.olefile._load_direntry(child_sid) #direntries[child_sid]
             log.debug('append_kids: child_sid=%d - %s - sid_left=%d, sid_right=%d, sid_child=%d'
                 % (child.sid, repr(child.name), child.sid_left, child.sid_right, child.sid_child))
+            # Check if kid was not already referenced in a storage:
+            if child.used:
+                self.olefile._raise_defect(DEFECT_INCORRECT,
+                    'OLE Entry referenced more than once')
+                return
+            child.used = True
             # the directory entries are organized as a red-black tree.
             # (cf. Wikipedia for details)
             # First walk through left side of the tree:
@@ -869,11 +894,6 @@ class OleDirectoryEntry:
             # kids list and dictionary:
             self.kids.append(child)
             self.kids_dict[name_lower] = child
-            # Check if kid was not already referenced in a storage:
-            if child.used:
-                self.olefile._raise_defect(DEFECT_INCORRECT,
-                    'OLE Entry referenced more than once')
-            child.used = True
             # Finally walk through right side of the tree:
             self.append_kids(child.sid_right)
             # Afterwards build kid's own tree if it's also a storage:
@@ -904,7 +924,11 @@ class OleDirectoryEntry:
         "Dump this entry, and all its subentries (for debug purposes only)"
         TYPES = ["(invalid)", "(storage)", "(stream)", "(lockbytes)",
                  "(property)", "(root)"]
-        print(" "*tab + repr(self.name), TYPES[self.entry_type], end=' ')
+        try:
+            type_name = TYPES[self.entry_type]
+        except IndexError:
+            type_name = '(UNKNOWN)'
+        print(" "*tab + repr(self.name), type_name, end=' ')
         if self.entry_type in (STGTY_STREAM, STGTY_ROOT):
             print(self.size, "bytes", end=' ')
         print()
@@ -1009,10 +1033,54 @@ class OleFileIO:
         self.parsing_issues = []
         self.write_mode = write_mode
         self.path_encoding = path_encoding
+        # initialize all attributes to default values:
         self._filesize = None
+        self.ministream = None
+        self._used_streams_fat = []
+        self._used_streams_minifat = []
+        self.byte_order = None
+        self.directory_fp = None
+        self.direntries = None
+        self.dll_version = None
+        self.fat = None
+        self.first_difat_sector = None
+        self.first_dir_sector = None
+        self.first_mini_fat_sector = None
         self.fp = None
+        self.header_clsid = None
+        self.header_signature = None
+        self.metadata = None
+        self.mini_sector_shift = None
+        self.mini_sector_size = None
+        self.mini_stream_cutoff_size = None
+        self.minifat = None
+        self.minifatsect = None
+        # TODO: duplicates?
+        self.minisectorcutoff = None
+        self.minisectorsize = None
+        self.ministream = None
+        self.minor_version = None
+        self.nb_sect = None
+        self.num_difat_sectors = None
+        self.num_dir_sectors = None
+        self.num_fat_sectors = None
+        self.num_mini_fat_sectors = None
+        self.reserved1 = None
+        self.reserved2 = None
+        self.root = None
+        self.sector_shift = None
+        self.sector_size = None
+        self.transaction_signature_number = None
         if filename:
             self.open(filename, write_mode=write_mode)
+
+
+    def __enter__(self):
+        return self
+
+
+    def __exit__(self, *args):
+        self.close()
 
 
     def _raise_defect(self, defect_level, message, exception_type=IOError):
@@ -1202,7 +1270,7 @@ class OleFileIO:
         log.debug( "Byte Order    = %X (expected: FFFE)" % self.byte_order )
         if self.byte_order != 0xFFFE:
             # For now only common little-endian documents are handled correctly
-            self._raise_defect(DEFECT_FATAL, "incorrect ByteOrder in OLE header")
+            self._raise_defect(DEFECT_INCORRECT, "incorrect ByteOrder in OLE header")
             # TODO: add big-endian support for documents created on Mac ?
             # But according to [MS-CFB] ? v20140502, ByteOrder MUST be 0xFFFE.
         self.sector_size = 2**self.sector_shift
@@ -1281,7 +1349,6 @@ class OleFileIO:
         # Load directory.  This sets both the direntries list (ordered by sid)
         # and the root (ordered by hierarchy) members.
         self.loaddirectory(self.first_dir_sector)
-        self.ministream = None
         self.minifatsect = self.first_mini_fat_sector
 
 
@@ -1606,6 +1673,31 @@ class OleFileIO:
             raise ValueError("Data is larger than sector size")
         self.fp.write(data)
 
+    def _write_mini_sect(self, fp_pos, data, padding = b'\x00'):
+        """
+        Write given sector to file on disk.
+
+        :param fp_pos: int, file position
+        :param data: bytes, sector data
+        :param padding: single byte, padding character if data < sector size
+        """
+        if not isinstance(data, bytes):
+            raise TypeError("write_mini_sect: data must be a bytes string")
+        if not isinstance(padding, bytes) or len(padding) != 1:
+            raise TypeError("write_mini_sect: padding must be a bytes string of 1 char")
+
+        try:
+            self.fp.seek(fp_pos)
+        except:
+            log.debug('write_mini_sect(): fp_pos=%d, filesize=%d' %
+                      (fp_pos, self._filesize))
+            self._raise_defect(DEFECT_FATAL, 'OLE sector index out of range')
+        len_data = len(data)
+        if len_data < self.mini_sector_size:
+            data += padding * (self.mini_sector_size - len_data)
+        if self.mini_sector_size < len_data:
+            raise ValueError("Data is larger than sector size")
+        self.fp.write(data)
 
     def loaddirectory(self, sect):
         """
@@ -1619,7 +1711,7 @@ class OleFileIO:
 
         # open directory stream as a read-only file:
         # (stream size is not known in advance)
-        self.directory_fp = self._open(sect)
+        self.directory_fp = self._open(sect, force_FAT=True)
 
         #[PL] to detect malformed documents and avoid DoS attacks, the maximum
         # number of directory entries can be calculated:
@@ -1815,6 +1907,23 @@ class OleFileIO:
             raise IOError("this file is not a stream")
         return self._open(entry.isectStart, entry.size)
 
+    def _write_mini_stream(self, entry, data_to_write):
+        if not entry.sect_chain:
+            entry.build_sect_chain(self)
+        nb_sectors = len(entry.sect_chain)
+
+        if not self.root.sect_chain:
+            self.root.build_sect_chain(self)
+        block_size = self.sector_size // self.mini_sector_size
+        for idx, sect in enumerate(entry.sect_chain):
+            sect_base = sect // block_size
+            sect_offset = sect % block_size
+            fp_pos = (self.root.sect_chain[sect_base] + 1)*self.sector_size + sect_offset*self.mini_sector_size
+            if idx < (nb_sectors - 1):
+                data_per_sector = data_to_write[idx * self.mini_sector_size: (idx + 1) * self.mini_sector_size]
+            else:
+                data_per_sector = data_to_write[idx * self.mini_sector_size:]
+            self._write_mini_sect(fp_pos, data_per_sector)
 
     def write_stream(self, stream_name, data):
         """
@@ -1840,8 +1949,9 @@ class OleFileIO:
         size = entry.size
         if size != len(data):
             raise ValueError("write_stream: data must be the same size as the existing stream")
-        if size < self.minisectorcutoff:
-            raise NotImplementedError("Writing a stream in MiniFAT is not implemented yet")
+        if size < self.minisectorcutoff and entry.entry_type != STGTY_ROOT:
+            return self._write_mini_stream(entry = entry, data_to_write = data)
+
         sect = entry.isectStart
         # number of sectors to write
         nb_sectors = (size + (self.sectorsize-1)) // self.sectorsize
@@ -2033,7 +2143,7 @@ class OleFileIO:
             return data
 
         # clamp num_props based on the data length
-        num_props = min(num_props, len(s) / 8)
+        num_props = min(num_props, int(len(s) / 8))
 
         for i in iterrange(num_props):
             property_id = 0 # just in case of an exception
@@ -2154,8 +2264,12 @@ class OleFileIO:
 # This script can be used to dump the directory of any OLE2 structured
 # storage file.
 
-if __name__ == "__main__":
-
+def main():
+    """
+    Main function when olefile is runs as a script from the command line.
+    This will open an OLE2 file and display its structure and properties
+    :return: nothing
+    """
     import sys, optparse
 
     DEFAULT_LOG_LEVEL = "warning" # Default log level
@@ -2278,5 +2392,9 @@ if __name__ == "__main__":
                 print('None')
         except:
             log.exception('Error while parsing file %r' % filename)
+
+
+if __name__ == "__main__":
+    main()
 
 # this code was developed while listening to The Wedding Present "Sea Monsters"

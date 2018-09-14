@@ -1,7 +1,8 @@
-olefile (formerly OleFileIO\_PL)
-================================
+olefile
+=======
 
-|Build Status| |Coverage Status| |Documentation Status|
+|Build Status TravisCI| |Build Status AppVeyor| |Coverage Status|
+|Documentation Status| |PyPI| |Can I Use Python 3?| |Say Thanks!|
 
 `olefile <https://www.decalage.info/olefile>`__ is a Python package to
 parse, read and write `Microsoft OLE2
@@ -25,8 +26,16 @@ News
 
 Follow all updates and news on Twitter: https://twitter.com/decalage2
 
--  **2017-01-06 v0.44**: several bugfixes, removed support for Python
-   2.5 (olefile2), added support for incomplete streams and incorrect
+-  **2018-09-09 v0.46**: OleFileIO can now be used as a context manager
+   (with...as), to close the file automatically (see
+   `doc <https://olefile.readthedocs.io/en/latest/Howto.html#open-an-ole-file-from-disk>`__).
+   Improved handling of malformed files, fixed several bugs.
+-  2018-01-24 v0.45: olefile can now overwrite streams of any size,
+   improved handling of malformed files, fixed several
+   `bugs <https://github.com/decalage2/olefile/milestone/4?closed=1>`__,
+   end of support for Python 2.6 and 3.3.
+-  2017-01-06 v0.44: several bugfixes, removed support for Python 2.5
+   (olefile2), added support for incomplete streams and incorrect
    directory entries (to read malformed documents), added getclsid,
    improved `documentation <http://olefile.readthedocs.io/en/latest>`__
    with API reference.
@@ -38,52 +47,15 @@ Follow all updates and news on Twitter: https://twitter.com/decalage2
    `#26 <https://github.com/decalage2/olefile/issues/26>`__ and
    `#27 <https://github.com/decalage2/olefile/issues/27>`__, better
    handling of malformed files, use python logging.
--  2015-01-25 v0.42: improved handling of special characters in
-   stream/storage names on Python 2.x (using UTF-8 instead of Latin-1),
-   fixed bug in listdir with empty storages.
--  2014-11-25 v0.41: OleFileIO.open and isOleFile now support OLE files
-   stored in byte strings, fixed installer for python 3, added support
-   for Jython (Niko Ehrenfeuchter)
--  2014-10-01 v0.40: renamed OleFileIO\_PL to olefile, added initial
-   write support for streams >4K, updated doc and license, improved the
-   setup script.
--  2014-07-27 v0.31: fixed support for large files with 4K sectors,
-   thanks to Niko Ehrenfeuchter, Martijn Berger and Dave Jones. Added
-   test scripts from Pillow (by hugovk). Fixed setup for Python 3
-   (Martin Panter)
--  2014-02-04 v0.30: now compatible with Python 3.x, thanks to Martin
-   Panter who did most of the hard work.
--  2013-07-24 v0.26: added methods to parse stream/storage timestamps,
-   improved listdir to include storages, fixed parsing of direntry
-   timestamps
--  2013-05-27 v0.25: improved metadata extraction, properties parsing
-   and exception handling, fixed `issue
-   #12 <https://github.com/decalage2/olefile/issues/12>`__
--  2013-05-07 v0.24: new features to extract metadata (get\_metadata
-   method and OleMetadata class), improved getproperties to convert
-   timestamps to Python datetime
--  2012-10-09: published
-   `python-oletools <https://www.decalage.info/python/oletools>`__, a
-   package of analysis tools based on OleFileIO\_PL
--  2012-09-11 v0.23: added support for file-like objects, fixed `issue
-   #8 <https://github.com/decalage2/olefile/issues/8>`__
--  2012-02-17 v0.22: fixed issues #7 (bug in getproperties) and #2
-   (added close method)
--  2011-10-20: code hosted on bitbucket to ease contributions and bug
-   tracking
--  2010-01-24 v0.21: fixed support for big-endian CPUs, such as PowerPC
-   Macs.
--  2009-12-11 v0.20: small bugfix in OleFileIO.open when filename is not
-   plain str.
--  2009-12-10 v0.19: fixed support for 64 bits platforms (thanks to Ben
-   G. and Martijn for reporting the bug)
--  see changelog in source code for more info.
+-  see
+   `changelog <https://github.com/decalage2/olefile/blob/master/CHANGELOG.md>`__
+   for more detailed information and the latest changes.
 
 Download/Install
 ----------------
 
 If you have pip or setuptools installed (pip is included in Python
-2.7.9+), you may simply run **pip install olefile** or **easy\_install
+2.7.9+), you may simply run **pip install olefile** or **easy_install
 olefile** for the first installation.
 
 To update olefile, run **pip install -U olefile**.
@@ -121,7 +93,7 @@ information.
 Real-life examples
 ------------------
 
-A real-life example: `using OleFileIO\_PL for malware analysis and
+A real-life example: `using OleFileIO_PL for malware analysis and
 forensics <http://blog.gregback.net/2011/03/using-remnux-for-forensic-puzzle-6/>`__.
 
 See also `this
@@ -131,7 +103,7 @@ about python tools for forensics, which features olefile.
 License
 -------
 
-olefile (formerly OleFileIO\_PL) is copyright (c) 2005-2017 Philippe
+olefile (formerly OleFileIO_PL) is copyright (c) 2005-2018 Philippe
 Lagadec (https://www.decalage.info)
 
 All rights reserved.
@@ -189,9 +161,17 @@ RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
 CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-.. |Build Status| image:: https://travis-ci.org/decalage2/olefile.svg?branch=master
+.. |Build Status TravisCI| image:: https://travis-ci.org/decalage2/olefile.svg?branch=master
    :target: https://travis-ci.org/decalage2/olefile
+.. |Build Status AppVeyor| image:: https://ci.appveyor.com/api/projects/status/github/decalage2/olefile?svg=true
+   :target: https://ci.appveyor.com/project/decalage2/olefile
 .. |Coverage Status| image:: https://coveralls.io/repos/github/decalage2/olefile/badge.svg?branch=master
    :target: https://coveralls.io/github/decalage2/olefile?branch=master
 .. |Documentation Status| image:: http://readthedocs.org/projects/olefile/badge/?version=latest
    :target: http://olefile.readthedocs.io/en/latest/?badge=latest
+.. |PyPI| image:: https://img.shields.io/pypi/v/olefile.svg
+   :target: https://pypi.org/project/olefile/
+.. |Can I Use Python 3?| image:: https://caniusepython3.com/project/olefile.svg
+   :target: https://caniusepython3.com/project/olefile
+.. |Say Thanks!| image:: https://img.shields.io/badge/Say%20Thanks-!-1EAEDB.svg
+   :target: https://saythanks.io/to/decalage2

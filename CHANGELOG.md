@@ -1,8 +1,30 @@
-Detailed CHANGELOG 
+Detailed CHANGELOG
 ==================
 
 olefile.py
 ----------
+* 2018-09-09 v0.46 PL:
+    - official v0.46 release
+* 2018-09-05 v0.46dev2 PL:
+    - fixed issue #96, disabled the VT dictionary which was not used anymore
+* 2018-08-23 v0.46dev1 PL:
+    - added main function (for pip entry points)
+    - fixed bug in OleDirectoryEntry.dump
+    - merged PR #93 by @enkelli, fixing issues #61, #103 and https://github.com/decalage2/oletools/issues/311
+    - merged PR #94 by @enkelli, 'float' object cannot be interpreted as an integer
+    - merged PR #101 by @OskarPersson, added context manager to OleFileIO
+* 2018-01-15 v0.45dev5 PL:
+    - fixed issue #79, added missing constants to \_\_all__ 
+* 2018-01-07 v0.45dev4 PL:
+    - merged PR #59 by @kijeong, olefile can now write mini streams
+* 2017-11-20 v0.45dev3 PL:
+    - fixed issue #81, raise an exception when attempting to open a stream after
+      the file was closed.
+* 2017-11-05 v0.45dev2 PL:
+    - fixed issue #31, set all attributes in OleFileIO.\_\_init__, use force_FAT=True in loaddirectory
+    - fixed issue #56, tests folder now included in the distribution package
+    - fixed issues #70 and #73, an incorrect byte order is now ignored
+
 (TODO: reverse order to have latest changes on top, use MD formatting)
 ```
 History from PIL 1.1.6:
